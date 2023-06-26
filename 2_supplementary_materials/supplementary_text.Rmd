@@ -1,0 +1,946 @@
+---
+title: "Supplement: Assessing the impact of norovirus inoculum dose on virus kinetics, shedding and symptoms"
+author: 
+  - Yang Ge
+  - Zane Billings
+  - Antone Opekun
+  - Mary Estes
+  - David Graham
+  - Juan Leon
+  - Katia Koelle
+  - Ye Shen
+  - Robert Atmar
+  - Benjamin Lopman
+  - Andreas Handel
+site: bookdown::bookdown_site
+documentclass: article
+output:
+  bookdown::pdf_document2: 
+    toc: true
+    toc_depth: 2
+    number_sections: true
+bibliography: "..//1_manuscript/bibliography.bib"
+csl: "..//1_manuscript/bibliography_form.csl"
+---
+
+
+```{r setup, include=FALSE, eval = TRUE}
+knitr::opts_chunk$set(echo = FALSE,message = FALSE,error = FALSE)
+# you need to install these packages if not already present
+mylibrary <- c(
+  "knitr",
+  "dplyr", 
+  "tidyr", 
+  "here",
+  "brms",
+  "huxtable",
+  "ftExtra",
+  "ggplot2",
+  "patchwork",
+  "stringr",
+  "ggthemes",
+  "rethinking",
+  "ggpubr"
+)
+lapply(mylibrary,library,character.only = TRUE)
+
+norodata <- readRDS(here("2_supplementary_materials/data/norodata.rds"))
+mvs <- norodata$mvs
+css <- norodata$css
+
+snorodata <- data.frame(Files = names(norodata), 
+                        Notes = c("Data description", 
+                                  "Virus shedding in feces (96 hours)",
+                                  "Virus shedding in feces (96 hours) low limit for LODs",
+                                  "Virus shedding in feces (96 hours) up limit for LODs",
+                                  "Virus shedding in feces (all)",
+                                  "Virus shedding in vomit (all)",
+                                  "Time-series virus shedding in feces",
+                                  "Time-series virus shedding in vomit",
+                                  "Onset of symptoms (Incubation)",
+                                  "Comprehensive symptom score components (CSSC)",
+                                  "Comprehensive symptom score (CSS)",
+                                  "Modified Vesikari score (MVS)")) %>% 
+  huxtable() %>% 
+  set_outer_padding(0) %>% 
+  set_bold(1, everywhere) %>% 
+  set_bottom_border(1, everywhere) %>% 
+  set_bottom_border(final(1), everywhere) %>% 
+  set_row_height(0) %>% 
+  set_all_padding(0) 
+
+filecols <- sapply(norodata, names)
+comcols <- Reduce(intersect, filecols[2:9])
+
+scomcols <- data.frame(`NO.` = seq(1:length(comcols)),
+                       Variable = comcols,
+                        Notes = c("Individual ID", 
+                                  "Amount of dose (RT-PCR unit)",
+                                  "Amount of dose (categorical version)",
+                                  "Dose variable used in models (log(Amount of dose) - log(48))")) %>% 
+  huxtable() %>% 
+  set_outer_padding(0) %>% 
+  set_bold(1, everywhere) %>% 
+  set_bottom_border(1, everywhere) %>% 
+  set_bottom_border(final(1), everywhere) %>% 
+  set_row_height(0) %>% 
+  set_all_padding(0) 
+
+tsfcols <- data.frame(`NO.` = seq(1:length(7:11)),
+                       Variable = names(norodata$ftsshedding)[7:11],
+                        Notes = c("Indicator of censoring due to LOD, 0 = no censoring, 2 = interval censoring", 
+                                  "Observed virus in the feces",
+                                  "Lower bound of the interval censoring",
+                                  "Natural log of the observed virus in the feces",
+                                  "Natural log of the lower bound of the interval censoring")) %>% 
+  huxtable() %>% 
+  set_outer_padding(0) %>% 
+  set_bold(1, everywhere) %>% 
+  set_bottom_border(1, everywhere) %>% 
+  set_bottom_border(final(1), everywhere) %>% 
+  set_row_height(0) %>% 
+  set_all_padding(0) 
+```
+
+
+\pagebreak
+
+
+# Overview
+
+
+This document contains detailed model description, additional results, and instruction in reproducibility.
+
+
+# Code and data files to reproduce results
+
+
+## Main files
+
+
+The `1_manuscript` folder contains the RMarkdown file of the main manuscript (`manuscript_main_text.rmd`) and auxiliary files (the `template.docx` help set font size, font family and so on). The `2_supplementary_materials` folder contains `supplementary_text.rmd` (the RMarkdown file of the supplement, which produces this document), a `data` folder, which contains the data (`norodata.rds`), an `analyses` folder, which contains all R codes for data analysis, and a `common_functions` folder, which contains several functions used by the scripts in the the `analyses` folder.
+
+
+## Data file
+
+
+The `norodata.Rds` (R data file (Rds)) contains a list with nine elements  (Table \@ref(tab:snorodata)). Each element contains parts of the data formatted in a way that is suitable for its intended analysis. These data sets were used by  the R scripts in the `analyses` folder.
+
+
+```{r snorodata}
+snorodata <- set_font_size(snorodata,10)
+caption(snorodata) <- sanitize("Description of norodata.Rds",type = "latex")
+snorodata
+```
+
+
+Data `fvshed_gmu_96h_LOD12_0_15000` and `fvshed_gmu_96h_LOD12_0_4e7` related to sensitivity analyses of limit detection issues that described in later sections.
+
+
+The variables show in Table \@ref(tab:scomcols) are shared across all data subsets.
+
+
+```{r scomcols}
+scomcols <- set_font_size(scomcols,10)
+caption(scomcols) <- sanitize("Description of four variables",type = "latex")
+scomcols
+```
+
+
+The data set of `ftsshedding` (fecal virus shedding) has several variables necessary for later time-series modeling.
+
+
+```{r tsfcols}
+tsfcols <- set_font_size(tsfcols,10)
+caption(tsfcols) <- sanitize("Description of variables necessary for later time-series modeling",type = "latex")
+tsfcols
+```
+
+
+The data set of `css_10symptoms` has ten kinds of symptoms collected from the trial. The data set of `css` has a variable (css) for comprehensive symptom score (CSS). The data set of `mvs` has one variable (mvs) for the Modified Vesikari score (MVS), and five variables (mvsc1 to mvsc5) for five score components, respectively.
+
+
+## Analysis files
+
+
+The `analyses` folder contains all R code for data analysis. For different outcomes, there is always one script that performs the model fitting (`<OUTCOME>.R`), and one for generating figures (`<OUTCOME>_plot.R`). Readers should choose an outcome and run the modeling code first, and then execute the plotting code. These are the existing scripts for fitting the different outcomes:
+
+
+* `allshedding_con.R` fits models to the 3 total shedding outcomes, treating dose as continuous. The code fits models for both the 19 individuals shown in the main text, and the 20 individuals shown in the supplementary results.  
+
+
+* `allshedding_cat.R` fits models to the 3 total shedding outcomes, treating dose as categorical.
+
+
+* `tsshedding_con.R` and `tsshedding_cat.R` fit the time-series data for fecal shedding to models, treating dose either continuous or categorical, respectively.
+
+
+`allsymptoms_con.R` and `allsymptoms_cat.R` fit the incubation period, CSS, and MVS outcomes for continuous or categorical dose, respectively.
+
+
+Model results are saved in the `/results/rds/`, and figures are saved in the `/results/plots/`.
+
+
+## Reproducing results
+
+
+To reproduce all our analyses, please follow these steps:
+
+
+1. Double click `Norovirus.Rpro`.
+
+
+1. Install necessary packages, including 
+`knitr`, `dplyr`, `tidyr`, `here`, `brms`, `huxtable`, `ggplot2`, `patchwork`, `stringr`, `ggthemes`, `ggpubr`.
+
+
+1. Open and run the R script `allshedding_con.R`, and then `allshedding_con_plot.R`.
+
+
+1. Open and run the R script `allsymptoms_con.R`, and then `allsymptoms_con_plot.R`.
+
+
+1. Open and run the R script `allshedding_cat.R`, and then `allshedding_cat_plot.R`.
+
+
+1. Open and run the R script `allsymptoms_cat.R`, and then `allsymptoms_cat_plot.R`.
+
+
+1. Open and run the R script `tsshedding_con.R`, and then `tsshedding_con_plot.R`.
+
+
+1. Open and run the R script `tsshedding_cat.R`, and then `tsshedding_cat_plot.R`.
+
+
+1. Open and run the RMD script `manuscript_main_text.rmd`, and `supplementary_text.rmd`.
+
+
+In our Bayesian models, we implemented four chains with four CPU cores. Depending on the computer performance, models may need a few hours to run.
+
+
+## Analysis with `rethinking` package
+
+
+All results presented in the main text and supplement are fit using `Stan` through the `brms` `R` package. As a check, we also implemented the same models with the `rethinking` package, which provides another `R` interface to the `Stan` fitting software.
+
+
+The code for the models implemented with `rethinking` is in the folder `2_supplementary_materials/analyses/rethinking-analysis` folder. 
+
+
+To run these scripts, the `rethinking` R package will need to be installed follwing the instructions here:
+https://github.com/rmcelreath/rethinking
+
+
+The folder contains three scripts which must be run in the following order:
+
+
+1. Open and run the R script `models.R`. This script fits the models to the data and consequently will have a long run time.
+
+
+1. Open and run the R script `preds.R`. This script processes the Stan model objects and generates the model predictions of interest. Some steps, particularly processing the time series models, may have a long run time.
+
+
+1. Open and run the R script `figs.R`. This script generates replicate figures similar to those included in the manuscript and the supplement.
+
+
+All of the results (model objects, predictions, and figures) will be saved in the folder `2_supplementary_materials/analyses/rethinking-results`. If this folder and the necessary subfolders do not exist, they will be created for you the first time the script `models.R` is run. Finally, we recommend restarting the R session between scripts to ensure that sufficient memory is available.
+
+
+## Session information
+
+
+We provide our PC session information as below:
+
+
+```{r}
+sessionInfo()
+```
+
+
+\pagebreak
+
+
+# Analysis of virus shedding
+
+
+The following sections provide additional details and further results related to our analyses of virus shedding.
+
+
+## Accounting for limits of detection in virus shedding
+
+
+The study that produced the data used two different methods to determine virus concentration in feces [@atmar2008]. The first method was a quantitative real-time RT-PCR (qRT-PCR) method. This method was able to detect virus up to a limit of detection of $40 \times 10^6$ genomic equivalent copies (GEC). If a sample was below this level (negative qPCR reading), the sample was retested using an immunomagnetic capture (IMC) RT-PCR assay. IMC RT-PCR is more sensitive, with a lower limit of detection of $15 \times 10^3$ GEC, but only produces a qualitative positive or negative readout. We labeled the limit of $15 \times 10^3$ GEC as LOD1, and $40 \times 10^6$ as LOD2. Thus, virus samples have a numeric value if they are above LOD2, are labeled as positive if they are below LOD2 but above LOD1, and are labeled as negative if they are below LOD1.
+
+
+We dealt with these detection limits as follows. 
+
+
+For the analyses involving the time-series data of fecal virus shedding in our Bayesian non-linear mixed effects model, we used the built-in approach of `brms` to handle censored values and deal with the limits of detection [@burkner2018]. In the time series models, the missing data were considered as censors. For example, with two LODs, 1) If the data was below both LODs (-,-), the interval was between 1 and 15000 (which leads to 0 and log(15000) on the modeling scale). 2) If the data was (+,-), the interval was between 15000 and 4e7; 3) If the data was (+,+), instead of interval, the observed value was used. In `brms`, the likelihood function uses a cumulative distribution function for censored data [@gelman2013a]. 
+
+
+For the simple analysis that does not use the time-series model, we substituted values. If a sample had a quantitative concentration above $40 \times 10^6$ GEC, we used the numeric value. If a sample was reported as positive (concentration between $40 \times 10^6$ GEC and $15 \times 10^3$ GEC), we used the geometric mean of those two values ($\approx 7.75 \times 10^5$ GEC). Similarly, if a sample was recorded as negative (concentration below $15 \times 10^3$ GEC), we used the geometric mean of $15 \times 10^3$ GEC and $1$ GEC ($\approx 122$ GEC). To explore the impact of these choices, we additional performed two sensitivity analyses. We set values below the LOD1 to 1, and values between LOD1 and LOD2 were set to either 15000 (the LOD1 value) or 4e7 (the LOD2 value), to explore two extremes. These additional analyses are shown further below in this supplement.
+
+
+To compute the total amount of virus shed per shedding event, we multiplied the virus concentration with the weight of the shed feces (i.e., GEC/g $\times$ weight of feces). Finally, for each individual, we summed values for all shedding events.
+
+
+Data for vomiting had similar limits of detection. These data were recorded as either a numeric value above $2,200$ GEC, a positive readout below $2,200$ GEC or a negative readout. For the vomiting data, we did not have information on the limit of detection for the qualitative assay. Based on a comparison of the two methods [@gilpatrick2000], we made the assumption that the LOD for the qualitative assay was a factor of 10 lower, thus 220 GEC. We then again took the geometric mean of 2,200 GEC and 220 GEC for the positive values ($\approx 696$ GEC), and 220 GEC and 1 GEC for the negative values ($\approx 15$ GEC). All virus concentrations were then multiplied with total vomit volume (i.e., virus particles/ml $\times$ volume of vomit), then summed those for each individual. This included making the additional assumption that 1 gram of vomit equated to 1 milliliter [@kirby2016].
+
+
+## Modeling total virus shedding
+
+
+We computed total virus shedding by multiplying virus concentration with sample weight (feces) or volume (vomit) for each shedding event, and summing all values for each individual.
+
+
+We applied a mixed effects model that investigated associations between the outcomes (total shedding amount) and inoculum dose. For the analysis shown in the main text, we assumed a linear relationship between the log of the dose ($x_i$) and the log of the outcome ($y_i$).
+
+
+We fitted the same model to each of the 3 outcomes. Those are 1) fecal shedding during the 96 hours under clinical observation, 2) fecal shedding including the time at which individuals recorded shedding events at home, and 3) vomit shedding (which occurred only during the first 96 hours).
+
+
+The mathematical definition of the model is as follows: 
+\begin{align*}
+\textrm{Likelihood: } & \\
+& y_{i} \sim \textrm{Normal} \left(\mu_{i}, \sigma \right) \\
+\textrm{Linear model: } & \\
+& \mu_{i}  = \alpha_i + \beta  (x_i - x^*) \\
+\textrm{Adaptive priors: } & \\
+& \alpha_i \sim \textrm{Normal} \left(\delta, \gamma \right) \\
+\textrm{Fixed priors: } & \\
+& \delta \sim \textrm{Normal} \left(25, 5 \right) \\
+& \gamma \sim \textrm{Half-Cauchy} \left(0, 2 \right) \\
+& \beta \sim \textrm{Normal} \left(0, 1 \right) \\
+& \sigma \sim \textrm{Half-Cauchy} \left(0,2 \right)
+\end{align*}
+
+
+The outcome of interest, $y_{i}$, is the total amount of virus shedding (in log units) of individual $i$. We assumed this value to be normally distributed with mean, $\mu_i$, and an overall standard deviation, $\sigma$. The mean was assumed to have an individual-specific component and a dose-dependent component. The parameter $\alpha_i$ describes the individual-level, dose-independent expected mean of the outcome for each individual, the parameter $\beta$ encodes the potential impact of the dose, $x_i$, that the individual i received. To make priors easier to define and interpret, we subtracted the intermediate dose from the dose values, i.e. we set $x^* = \log(48)$. This adjustment implies that the parameter $\alpha_i$ represents the expected total amount of virus shedding when the inoculum dose is at this intermediate value. (Without subtraction of $x^*$, $\alpha_i$ would represent total shedding if the dose was zero, which is biologically not meaningful and makes assigning reasonable priors more difficult [@mcelreath2020].) 
+
+
+Priors are chosen based on what we know about the virus kinetics, and to ensure prior predictive simulations produce flexible but reasonable outcomes [@mcelreath2020]. We used Half-Cauchy distributions for priors of standard deviation, because Cauchy has fatter tails than normal distribution which will make priors less informative. Since vomit outcome values were lower than those for feces, we adjusted the $\alpha_i$ prior for this model to have a mean around 20.
+
+
+As part of our sensitivity analyses, presented below, we also explored a model which treats dose as categorical. The following lines in the model are adjusted accordingly:   
+\begin{align*}
+\textrm{Linear model: } & \\
+& \mu_{i}  = \alpha_i + \beta_{dose_i} \\
+\textrm{Adaptive priors: }  & \\
+& \alpha_i \sim \textrm{Normal} \left(0, \gamma \right) \\
+\textrm{Fixed priors: }  & \\
+& \gamma \sim \textrm{Half-Cauchy} \left(0, 2 \right) \\
+& \beta_{dose_i}  \sim \textrm{Normal} \left(25, 5 \right),
+\end{align*}
+
+
+In this notation, the parameter $\beta_{dose_i}$ takes on discrete values based on the dose level of each individual, $i$. Specifically, the 3 categories are low, medium, or high dose, corresponding to 4.8, 48, or 4800 RT-PCR units.
+
+
+## Modeling longitudinal virus concentration kinetics
+
+
+To model the longitudinal time-series of virus concentration in feces, we used a previously developed equation that was shown to describe virus time-course in acute viral infections well [@holder2011]. This equation provides a good empirical function to fit the increase, then decrease of viral load seen in many acute viral infections. The equation has four parameters and is given by: 
+
+
+$$V(t) = \frac{2 p}{e^{-g  (t - T)} + e^{d  (t - T)}}$$
+
+
+The outcome of interest is virus load as a function of time, $V(t)$. The model parameters approximately represent the peak virus load ($p$), the initial exponential growth rate ($g$), the time of virus peak ($T$) and the eventual rate of virus decline ($d$). (The parameters only approximately map to those biological quantities, see [@holder2011] for details.)
+
+
+Since all parameters in the model above need to be positive to achieve biologically reasonable trajectories for $V(t)$, we rewrote the equation for our purpose with exponentiated parameters. That is, we assume that the deterministic portion of the virus load data (on a log scale, denoted below as $\mu_{i,t}$), is described for each individual, $i$, by   
+
+
+$$\mu_{i,t} = \log\left( \frac{2 \exp(p_i)}{e^{-\exp(g_i)  (t_i - \exp(T_i))} + e^{\exp(d_i)  (t_i - \exp(T_i))}}\right)$$
+
+
+Since there was a fair amount of variability in the virus load data, we modeled the outcome using a non-standardized Student-t distribution instead of a Normal distribution, which provides more robust estimates in the presence of strong variability [@burkner2018; @mcelreath2020]. Specifically, we model the virus load data as
+
+
+$$y_{i,t}  \sim \textrm{Student-t}\left(k, \mu_{i,t}, \sigma\right)$$
+
+
+where the standard deviation ($\sigma$) is modeled with a Half-Cauchy distribution, and the degrees of freedom ($k$) are modeled with a Gamma distribution with priors as shown in the equations below. We assumed that each of the four model parameters of the $\mu_{i,t}$ equation follow normal distributions, and can be described by linear models, each with an individual-level intercept parameter and a parameter quantifying the potential impact of dose. We again modeled the latter for our main analysis as being a linear function of the log of the dose. As described above, we again subtracted the intermediate dose to make the intercept parameters biologically meaningful. The model equations are given by: 
+
+
+\pagebreak
+
+
+\begin{align*}
+\textrm{Likelihood: } & \\
+y_{i,t} & \sim \textrm{Student}\left(k, \mu_{i,t}, \sigma\right) \\
+\textrm{Overall time-series equation: } & \\
+\mu_{i,t} & = \log\left( \frac{2 \exp(p_i)}{e^{-\exp(g_i)  (t_{i} - \exp(T_i))} + e^{\exp(d_i)  (t_{i} - \exp(T_i))}}\right) \\
+\textrm{Parameter equations: }  & \\
+p_{i} & =  p_{0,i} + p_1 \cdot (x_i - x^*)  \\
+g_{i} & =  g_{0,i} + g_1 \cdot (x_i - x^*) \\
+T_{i} & =  T_{0,i} + T_1 \cdot (x_i - x^*) \\
+d_{i} & =  d_{0,i} + d_1 \cdot (x_i - x^*) \\
+\textrm{Adaptive priors: }  & \\
+p_{0,i} & \sim \textrm{Normal}(\mu_p, \sigma_p) \\
+g_{0,i} & \sim \textrm{Normal}(\mu_g, \sigma_g) \\
+T_{0,i} & \sim \textrm{Normal}(\mu_T, \sigma_T) \\
+d_{0,i} & \sim \textrm{Normal}(\mu_d, \sigma_d) \\
+\textrm{Fixed priors: }   & \\
+\mu_p & \sim \textrm{Normal}(25, 5) \\
+\sigma_p & \sim \textrm{Half-Cauchy}(0,1)  \\
+\mu_g & \sim \textrm{Normal}(3,1) \\
+\sigma_g & \sim \textrm{Half-Cauchy}(0,1)  \\
+\mu_T & \sim \textrm{Normal}(0,1) \\
+\sigma_T & \sim \textrm{Half-Cauchy}(0,1)  \\
+\mu_d & \sim \textrm{Normal}(-1,0.5) \\
+\sigma_d & \sim \textrm{Half-Cauchy}(0,1)  \\
+p_1 & \sim \textrm{Normal}(0,1) \\
+g_1 & \sim \textrm{Normal}(0,0.5) \\
+T_1 & \sim \textrm{Normal}(0,0.5) \\
+d_1 & \sim \textrm{Normal}(0,0.5) \\
+k & \sim \textrm{Gamma}(shape = 2, rate = 0.1)  \\
+\sigma & \sim \textrm{Half-Cauchy}(0,1)
+\end{align*}
+
+
+Values for priors were chosen to be weakly informative, such that prior predictive simulations produced virus-load trajectories that made biological sense, while still allowing for a wide variety of possible trajectories to be informed by fitting to the data. The peak level of virus concentration for norovirus in our data and previous studies is broadly in the range of $10 ^{10}$ to $10^{14}$ [@lee2007; @teunis2015; @atmar2008] (around 23-35 in log units). We approximately centered our prior around those values, while allowing for a broad standard deviation so that the data will dominate the posterior results. Similarly, the growth rate, $\mu_g$, will have a value such that the peak is reached within the first several days following infection. A Normal distribution with a mean of 3 (in log units) can produce the necessary range of value. Virus is expected to peak a few days following infection. Thus we chose $\mu_T$ and $T_1$ to have normal distributions with a spread such that the range of values for $\exp(T)$ is centered around the first few days. The decay rate, $\mu_d$, needs to allow for a decline of virus to undetectable levels that can be as fast as a week or longer than a month. A Normal distribution with log-transformed mean of -1 can produce such outcomes.
+
+
+We performed prior predictive simulations to ensure that our priors led to biologically reasonable time-series trajectories, while also being broad and flexible enough to let the data dominate the posterior distribution.
+
+
+For the sensitivity analysis, where we treated dose as a categorical variable, the dose-associated parameters change and now are assigned distinct values based on dose category. The following components of the above model changed, with the rest remaining the same:
+\begin{align*}
+\textrm{Parameter equations: } & \\
+p_{i} & =  p_{0,i} + p_{1,dose_i}  \\
+g_{i} & =  g_{0,i} + g_{1,dose_i} \\
+T_{i} & =  T_{0,i} + T_{1,dose_i} \\
+d_{i} & =  d_{0,i} + d_{1,dose_i} \\
+\textrm{Adaptive priors: }  & \\
+& p_{0,i} \sim \textrm{Cauchy} \left(0, \gamma_p \right) \\
+& p_{0,i} \sim \textrm{Cauchy} \left(0, \gamma_g \right) \\
+& p_{0,i} \sim \textrm{Cauchy} \left(0, \gamma_T \right) \\
+ & p_{0,i} \sim \textrm{Cauchy} \left(0, \gamma_d \right) \\
+\textrm{Fixed priors: } & \\
+& \gamma_p \sim \textrm{Half-Cauchy} \left(0, 1 \right) \\
+& \gamma_g \sim \textrm{Half-Cauchy} \left(0, 1 \right) \\
+& \gamma_T \sim \textrm{Half-Cauchy} \left(0, 1 \right) \\
+& \gamma_d \sim \textrm{Half-Cauchy} \left(0, 1 \right) \\
+& p_{1,dose_i} \sim \textrm{Normal}(25, 5) \\
+& g_{1,dose_i} \sim \textrm{Normal}(3, 1) \\
+& T_{1,dose_i} \sim \textrm{Normal}(0, 1) \\
+& d_{1,dose_i} \sim \textrm{Normal}(-1, 0.5)
+\end{align*}
+
+
+As before, in this categorical analysis, $x_i$ is the dose category for individual $i$, and is either low, medium or high.
+
+
+\pagebreak
+
+
+# Analysis of symptom outcomes
+
+
+The following sections provide additional details and further results related to our analyses of infection symptoms.
+
+
+We considered three different symptom-related outcomes, namely time to first symptom onset (incubation period) and two versions of scores that quantify overall infection severity. 
+
+
+Since individuals were allowed to leave the study center after 96 hours and illness is typically self-limiting lasting for only a few days [@matthews2012], we calculated the scores based on records in the first 4 days.
+
+
+## Incubation period
+
+
+Incubation period, i.e., the time between infection and onset of symptoms, was directly computed from the data as the time-span between reported time at which the infection challenge was administered, and the time at which the first symptom was reported.
+
+
+## Modified Vesikari score (MVS)
+
+
+The modified Vesikari score (MVS) is a previously defined quantity that has been used in a modified form by several studies to measure norovirus severity [@ruuska1990; @freedman2010; @atmar2011; @bierhoff2018]. The score has the seven components shown in Table \@ref(tab:vesikari-tab-1). For our data set, since volunteers were housed in a healthcare setting, the health care provider visit component was not applicable, and we thus removed it from the score calculation [@atmar2011]. Since we did not have information on treatment, we also dropped that component. This left us with a five-component score, which was computed for each individual following the rules shown in Table \@ref(tab:vesikari-tab-1).  
+
+
+```{r, vesikari-tab-1}
+spt_data <- tibble(
+  "Components" = c("C1: Diarrhea duration, days",
+                   "C2: Maximum number of daily diarrheal stools",
+                   "C3: Vomiting duration, days",
+                   "C4: Maximum number of daily vomiting episodes",
+                   "C5: Maximum recorded fever",
+                   "Health care provider visits",
+                   "Treatment"),
+  "Score = 0" = c("0","0","0","0","Not Elevated","N/A","N/A"),
+  "Score = 1" = c("1 - 4","1 - 3","1","1","Moderate","N/A","N/A"),
+  "Score = 2" = c("5","4 - 5","2","2 - 4","Mild","N/A","N/A"),
+  "Score = 3" = c(">=6",">=6",">=3",">=5","Severe","N/A","N/A"))
+
+spt_hux <- huxtable(spt_data) %>% 
+  set_outer_padding(0) %>% 
+  set_bold(1, everywhere) %>% 
+  set_bottom_border(1, everywhere) %>% 
+  set_bottom_border(final(1), everywhere) %>% 
+  set_row_height(0) %>% 
+  set_all_padding(0) 
+
+caption(spt_hux) <- huxtable::sanitize("Modified vesikari score components",type = "latex")
+spt_hux <- huxtable::set_font(spt_hux,"Times")
+spt_hux <- huxtable::set_font_size(spt_hux,10)
+spt_hux <- huxtable::add_footnote(spt_hux, "- N/A: Not applicable for our study")
+spt_hux
+```
+
+
+Table \@ref(tab:vesikari-tab-2) shows the scores for all 20 volunteers in the study that were part of our analyses.
+
+
+```{r,  vesikari-tab-2}
+mvs_hux <- mvs %>% 
+  arrange(desc(dose)) %>% 
+  mutate(dose = as.character(dose)) %>% 
+  select(-dose_log, -dose_cat) %>% 
+  huxtable() %>% 
+  set_markdown_contents(1, 1, "ID") %>% 
+  set_markdown_contents(1, 2, "Dose") %>% 
+  set_markdown_contents(1, 3, "C1") %>% 
+  set_markdown_contents(1, 4, "C2") %>%
+  set_markdown_contents(1, 5, "C3") %>%
+  set_markdown_contents(1, 6, "C4") %>%
+  set_markdown_contents(1, 7, "C5") %>%
+  set_markdown_contents(1, 8, "Total") %>%
+  set_outer_padding(0) %>% 
+  set_bold(1, everywhere) %>% 
+  set_bottom_border(1, everywhere) %>% 
+  set_bottom_border(final(1), everywhere) %>% 
+  set_row_height(0) %>% 
+  set_all_padding(0) 
+
+caption(mvs_hux) <- huxtable::sanitize("Modified vesikari scores for each individual.",type = "latex")
+mvs_hux <- huxtable::set_font(mvs_hux,"Times")
+mvs_hux <- huxtable::set_font_size(mvs_hux,10)
+mvs_hux
+```
+
+
+## Comprehensive symptom score (CSS)
+
+
+In addition to the modified Vesikari score, we defined and computed a comprehensive symptom score which took all recorded symptoms into account.
+
+
+The study reported the following symptoms: body temperature, malaise, muscle aches, headache, nausea, chills, anorexia, cramps, unformed or liquid feces, and vomiting. Clinical symptoms (except feces and vomiting) were reported as none, mild, moderate, or severe, which we coded as a score of 0 to 3. For feces, we used a scoring of solid = 0, unformed = 1, and liquid = 2. Vomit was reported as absent or present and scored as 0 or 1.
+
+
+Individuals had their symptoms recorded at different times and frequencies throughout the day. Thus, summing up the recorded scores would have introduced bias due to different recording frequencies. Thus, we instead determined the highest score per symptom for each individual per day, and summed those. This produced a daily total symptom score for each individual. We then summed those to obtain our comprehensive symptom score. For example, if one individual had daily total symptom score values of 5 (1st day), 10 (2nd day), 2 (3rd day), and 0 (4th day), the final total symptom scores would be 17. 
+
+
+Table \@ref(tab:comprehensive-score-tab-1) shows the daily and total comprehensive score values for the 20 individuals, Figure \@ref(fig:comprehensive-score-fig-1) shows the same information in graphical form, stratified by dose.
+
+
+```{r, comprehensive-score-tab-1}
+pk_hux <- css %>% 
+  pivot_wider(names_from = which_day, values_from = css) %>% 
+  mutate(Total = Day1+Day2+Day3+Day4) %>% 
+  arrange(desc(dose)) %>% 
+  mutate(dose = as.character(dose)) %>% 
+  select(-dose_log, -dose_cat) %>% 
+  huxtable() %>% 
+  set_markdown_contents(1, 1, "ID") %>% 
+  set_markdown_contents(1, 2, "Dose") %>% 
+  set_outer_padding(0) %>% 
+  set_bold(1, everywhere) %>% 
+  set_bottom_border(1, everywhere) %>% 
+  set_bottom_border(final(1), everywhere) %>% 
+  set_row_height(0) %>% 
+  set_all_padding(0) 
+
+caption(pk_hux) <- huxtable::sanitize("Comprehensive symptom score values.",type = "latex")
+pk_hux <- huxtable::set_font(pk_hux,"Times")
+pk_hux <- huxtable::set_font_size(pk_hux,10)
+pk_hux
+```
+
+
+\clearpage
+
+
+```{r comprehensive-score-fig-1, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Daily comprehensive symptom score stratified by inoculum dose group"}
+include_graphics(here("2_supplementary_materials/analyses/plots/plot_pkscore_ts_id20.png"))
+```
+
+
+\clearpage
+
+
+## Modeling symptom outcomes
+
+
+Using following models, we tested the impact of dose on each kind of symptom in the trial and two types of symptom scores.
+
+
+The incubation period is positive and not too far from zero (as measured in days). Thus, to prevent any possible negative outcomes, we assumed it followed a log-normal distribution. The rest of the model is similar to those implemented for the total shedding outcomes, with the full model is given below.
+\begin{align*}
+\textrm{Likelihood: } \\
+& Y_{i} \sim \textrm{Log-Normal} \left(\mu_{i}, \sigma \right) \\
+\textrm{Linear model: } \\
+&  \mu_{i}  = \alpha_i + \beta  (x_i - x^*) \\
+\textrm{Adaptive priors: } & \\
+& \alpha_i \sim \textrm{Normal} \left(\delta, \gamma \right) \\
+\textrm{Fixed priors: } & \\
+& \delta \sim \textrm{Normal} \left(1, 5 \right) \\
+& \gamma \sim \textrm{Half-Cauchy} \left(0, 2 \right) \\
+& \beta \sim \textrm{Normal} \left(0, 1 \right) \\
+& \sigma \sim \textrm{Half-Cauchy} \left(0,2 \right),
+\end{align*}
+
+
+As we did for the total shedding outcomes, the model was adjusted for the categorical dose sensitivity analysis as follows.
+\begin{align*}
+\textrm{Linear model: } \\
+& \mu_{i} = \alpha_i + \beta_{dose_i} \\
+\textrm{Adaptive priors: } & \\
+\alpha \textrm{ prior: } \ & \alpha_i \sim \textrm{Normal} \left(0, \gamma \right) \\
+\textrm{Fixed priors: } & \\
+& \gamma \sim \textrm{Half-Cauchy} \left(0, 2 \right) \\
+& \beta_{dose_i}  \sim \textrm{Normal} \left(1, 5 \right)
+\end{align*}
+
+
+We used the same overall model structure for the MSV and CSS outcomes. However, we modeled these outcomes using a Gamma-Poisson distribution (also called negative binomial distribution) for the likelihood, since both scores are non-negative integer-valued. The Gamma-Poisson model allows for additional variance (also called overdispersion) compared to a Poisson distribution. The variance is determined by the $\phi$ parameter, and the rate $\lambda$ is similar to the rate of an ordinary Poisson distribution. We use the customary log-link for $\lambda$, and model its functional relationship with dose as above with an individual-level intercept and a dose-specific component, linearly dependent on the log of the dose. The model is given by the following set of equations.
+\begin{align*}
+\textrm{Likelihood: } \\
+& y_{i} \sim \textrm{Gamma-Poisson} \left(\lambda_{i}, \phi \right) \\
+\textrm{Linear model: } \\
+& \log(\lambda_{i})  = \alpha_i + \beta  (x_i - x^*) \\
+\textrm{Adaptive priors: } & \\
+& \alpha_i \sim \textrm{Normal} \left(\delta, \gamma \right) \\
+\textrm{Fixed priors: } & \\
+& \delta \sim \textrm{Normal} \left(1, 5 \right) \\
+& \gamma \sim \textrm{Half-Cauchy} \left(0, 2 \right) \\
+& \beta \sim \textrm{Normal} \left(0, 1 \right) \\
+& \phi \sim \textrm{Half-Cauchy} \left(0,2 \right)
+\end{align*}
+
+
+Values for the prior distributions were again chosen to ensure reasonable prior predictive results for the outcomes. To model dose as a categorial variable, we changed the following parts of the model.
+\begin{align*}
+\textrm{Linear model: } \\
+& \log(\lambda_{i}) = \alpha_i + \beta_{dose_i} \\
+\textrm{Adaptive priors: } & \\
+& \alpha_i \sim \textrm{Normal} \left(0, \gamma \right) \\
+\textrm{Fixed priors: } & \\
+& \gamma \sim \textrm{Half-Cauchy} \left(0, 2 \right) \\
+& \beta_{dose_i}  \sim \textrm{Normal} \left(1, 5 \right)
+\end{align*}
+
+
+\pagebreak
+
+
+# Model setup, outcomes and diagnostics
+
+
+In our Bayesian models, we generally implemented four chains with about 30k iterations with 25k as a warmup to obtain 5k posterior samples for final results. We assessed Rhat, mixing of chains, and posterior distributions to ensure convergence.
+
+
+As described above, the models were implemented in `R` using the `brms` package. We report results based on predictions from the posterior samples of the models.[@gelman2013a] The predictions are based on an assumption that a new individual, who theoretically similar to individuals in this trial but has not been enrolled previously, be given with a certain amount of virus. Then, the model posterior predictive distribution of the new individual was summarized by a mean and credible interval for an outcome.
+
+
+# Evaluation of prior and posterior distributions for model parameters
+
+
+To ensure that our results were not overly influenced by the choice of prior distributions, we compared prior and posterior distributions.
+
+
+The parameter's prior and posterior distributions showed that the choice of prior distribution had no significant impact on our results (Figure \@ref(fig:priors19) to \@ref(fig:priorscat)).
+
+
+```{r priors19, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Comparisons of parameters' prior and posterior distributions for the main model."}
+include_graphics(here("2_supplementary_materials/analyses/plots/model_con_priors19_compare_plot.png"))
+```
+
+
+\clearpage
+
+
+```{r priors20, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Comparisons of parameters' prior and posterior distributions for the model with one the very-low dose infected individual."}
+include_graphics(here("2_supplementary_materials/analyses/plots/model_con_priors20_compare_plot.png"))
+```
+
+
+\clearpage
+
+
+```{r priorscat, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Comparisons of parameters' prior and posterior distributions for the model dose as a categorical variable."}
+include_graphics(here("2_supplementary_materials/analyses/plots/model_con_priors_cat_compare_plot.png"))
+```
+
+
+\clearpage
+
+
+# Results from additional analyses
+
+
+## Fecal virus shedding during the full observation period
+
+
+In the main text, we focus on the data collected during the time individuals were under direct observation, since this ensures complete collection of all feces. Here, we investigate the relation between dose and total fecal shedding for all samples, including those individuals were asked to collect after returning home. We did not find evidence for associations between dose and virus shedding.
+
+
+```{r, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Virus shedding in feces during the full observation period. Everything else as described for main text Figure 1."}
+include_graphics(here("2_supplementary_materials/analyses/plots/fecesall_fit_plot_con19.png"))
+```
+
+
+\clearpage
+
+
+## Impact of changing assumption for LOD values
+
+As described above, for the non time-series analysis shown in the main text, we set measurements that were below LOD2 but above LOD1 to the geometric mean of those 2 values, and values below LOD1 were set to the geometric mean of LOD1 and 1. To explore the impact of these choices, we tested a few different choices for those values. The next figures show that the overall observed pattern remains consistent, independent of the choices for the LOD values.
+
+
+```{r, out.width="100%", fig.align='center', echo=FALSE, fig.cap="The association between dose and virus shedding in feces (first 4 days) when values below the LOD1 were set to 1, and values between LOD1 and LOD2 were set to 15000 (the LOD1 value)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/feces96_fit_LOD12_0_15000_plot_con19.png"))
+```
+
+
+\clearpage
+
+
+```{r, out.width="100%", fig.align='center', echo=FALSE, fig.cap="The association between dose and virus shedding in feces (first 4 days) when values below the LOD1 were set to 1, and values between LOD1 and LOD2 were set to 4e7 (the LOD2 value)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/feces96_fit_LOD12_0_4e7_plot_con19.png"))
+```
+
+
+\clearpage
+
+
+## Vomit events
+
+
+In each dose group, only a few individuals had vomiting events. Some of these individuals had multiple vomiting events. Figure \@ref(fig:vomittsid20) graphically displays the vomiting event data. The recorded vomiting events were not sufficient to allow for a time-series analysis.
+
+
+```{r vomittsid20, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Vomiting events and virus concentration for each event, stratified by dose. Symbols indicate different individuals. 4, 3 and 3 individuals had at least one vomiting event in the low/medium/high dose groups respectively."}
+include_graphics(here("2_supplementary_materials/analyses/plots/plot_vomit_id19.png"))
+```
+
+
+\clearpage
+
+
+## Individual-level fits to fecal sheedding time series data
+
+
+The longitudinal virus shedding data in feces and fitted model results are shown in Figure \@ref(fig:idcurves) for each individual.
+
+
+```{r idcurves, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Fitted fecal virus concentration curves. The red lines show mean of estimations. The grey areas show 95\\% equal-tailed credible interval (CI). LOD1 and LOD2 indicate the two limits of detection. Points with triangle shape represented samples that are positive qRT-PCR. Points with circle shape represented samples that are positive IMC and negative qRT-PCR. Points with square shape represented samples that are negative IMC and negative qRT-PCR. Data are shown as originally reported, values below either of the LODs were treated during model fitting as described above."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_curves_mu_id_con19_plot_combine.png"))
+```
+
+
+\clearpage
+
+
+## Correlation  between total virus shed in feces and virus load
+
+
+We compared the fitted total virus load (area under the curve), to the observed total virus shed in feces to assess model performance. We found strong correlation, which support the robustness of our models.
+
+
+```{r 2shed2cor, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Correlation plot between total virus shed in feces and virus load. Open circles represent data points. The lines and shaded regions indicate the mean and 95\\% credible intervals of the fitted Bayesian model."}
+include_graphics(here("2_supplementary_materials/analyses/plots/feces96_2shed_cor_plot.png"))
+```
+
+
+\clearpage
+
+
+## Assessing association of individual symptoms with dose
+
+In the main text, we show that there is little association between dose and symptoms if quantified by the MVS, but there is an association if quantified by the CSS. To understand this difference, we explored correlations between all individual symptoms and dose. While the uncertainty intervals are wide, the figure below shows that symptoms that are part of the MVS (Feces form, Body temperature, and Vomit) show very little variation with dose, while a few other symptoms, which are part of CSS but not MVS, do show some dose variation (Cramps, Malaise and Nausea). This is likely the reason why CSS shows variation with dose, while MVS does not. A similar pattern is seen when dose is treated categorically, as shown below.
+
+
+```{r, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Associations between dose and each type of symptoms used for the calculation of comprehensive symptom score. The impact of dose was tested with each kind of symptom in the CSS."}
+include_graphics(here("2_supplementary_materials/analyses/plots/css_10symptoms_plot_con19.png"))
+```
+
+
+\clearpage
+
+
+## Assessing association of symptoms with virus growth rate
+
+
+In the discussion, we speculate that the association of dose with increased symptoms might be mediated by a more rapid onset of the disease, due to more rapid initial virus growth at higher doses. To test this, we used the fitted individual level virus load curves and calculated the virus growth rate by 
+\begin{align*}
+g_{v} = \frac{v_{t = 0.625} - v_{t = 0.5}}{0.625 - 0.5},
+\end{align*}
+where, $g_{v}$ is virus concentration growth rate; $v_{t = 0.625}$ is the virus concentration value at day 0.625; $v_{t = 0.5}$ is the time of virus concentration at day 0.5. We arbitrarily chose the two time points to make sure the virus concentration is in the exponential growth phase and has not yet started to level off.
+
+
+The following figures show the association between growth rate and symptom scores (MVS and CSS) for each individual. They are non-linear curves because negative binomial distributions were used in models similarly to the symptom scores (Figure 4, main manuscript). The range of x axis was based on data.
+
+
+```{r, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Associations between CSS and virus growth rate estimated by the time series model."}
+include_graphics(here("2_supplementary_materials/analyses/plots/virus_growth_rate_css_con19_plot.png"))
+```
+
+
+\clearpage
+
+
+```{r, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Associations between MVS and virus growth rate estimated by the time series model."}
+include_graphics(here("2_supplementary_materials/analyses/plots/virus_growth_rate_mvs_con19_plot.png"))
+```
+
+
+\clearpage
+
+
+## Treating dose as a categorical variable
+
+
+The following figures repeat the analyses and results shown in the main text, but now with dose treated as categorical.
+
+
+### Assessing association of total virus shedding with dose
+
+
+Figure \@ref(fig:trendplots19cat) shows data and model estimates for total shedding for each dose category, where low/medium/high indicate dose levels of 4.8, 48, and 4800 RT-PCR units. The overall pattern is similar to the one we found for the continuous analysis presented in the main text.
+
+
+```{r trendplots19cat, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Virus shedding in feces or vomit. The bars show 95\\% equal-tailed credible intervals (CI). Points with circle shape are raw data. A) Fecal virus shedding in the first 96 hours. B) Fecal virus shedding with all data. C) Vomit virus shedding. The points show mean of estimations. Missing values due to LODs were replaced with fixed values (Supplementary, accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/allshedding_cat19.png"))
+```
+
+
+\clearpage
+
+
+### Modeling of virus concentration in feces
+
+
+Figures \@ref(fig:idcurves19cat) -- \@ref(fig:curves2nd19cat) show data and model estimates for the longitudinal time-series analysis of the virus concentration in feces, with dose now treated as categorical (low, medium, or high). Again, the overall observed patterns are similar to the ones we found for the continuous analysis presented in the main text.
+
+
+```{r idcurves19cat,out.width="100%", fig.align='center', echo=FALSE, fig.cap="Fitted fecal virus concentration curves. The red lines show means of estimations. The grey areas show 95\\% equal-tailed credible intervals (CI). LOD1 and LOD2 indicate the two limits of detection. Points with triangle shape represented samples that with positive qRT-PCR results. Points with circle shape represented samples with positive IMC and negative qRT-PCR results. Points with square shape represented samples with negative IMC and negative qRT-PCR results. Missing values due to LODs were treated as censors (Supplementary accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_curves_mu_id_cat19_plot_combine.png"))
+```
+
+
+\clearpage
+
+
+```{r fixcurves2119cat, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Fitted virus concentration (GEC/g) in feces. The lines show means of estimations. The colored areas show 95\\% equal-tailed credible intervals (CI). LOD1 and LOD2 represent the two limits of detection. A) The fitted curves for 90 days. B) The fitted curves for the first 7 days. Missing values due to LODs were treated as censors (Supplementary accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_curves_mu_cat19_plot.png"))
+```
+
+
+\clearpage
+
+
+```{r curves2nd19cat, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Model predictions for viral kinetics as a function of inoculum dose. The points show means of estimations. The bars show 95\\% equal-tailed credible intervals (CI). A) Time to detection (above $15,000$ GEC). B) Time to peak. C) Shedding duration (period that virus concentration above $15,000$ GEC). D) Total virus load (area under concentration curve)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_brms_fit_op_cat19_plot.png"))
+```
+
+
+\clearpage
+
+
+### Assessing association of symptoms with dose
+
+
+Figure \@ref(fig:sympmod19cat) shows data and model estimates for the different symptom outcomes for each dose category. Again, the patterns seen are similar to those shown in the main text. One difference is that the comprehensive score only increases for the highest dose group, while the two lower groups are similar.
+
+
+```{r, sympmod19cat, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Estimated dose impact on symptoms. The points show means of estimations. The bars show 95\\% equal-tailed credible intervals (CI). Points with circle shape are raw data."}
+include_graphics(here("2_supplementary_materials/analyses/plots/allsymptoms_cat19.png"))
+```
+
+
+Looking at 95% credible interval of each symptom's score (horizontal bars in Figure \@ref(fig:10symptomscat)) by three dose groups, we again find the pattern reported above for the case of treating dose as continous. Namely, symptoms associated with MVS do not show any pronounced variation with dose, while several symptoms that are part of the CSS but not the MVS do show variation with dose.
+
+
+```{r 10symptomscat, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Associations between dose and each type of symptoms used for the calculation of comprehensive symptom score. The impact of dose was tested with each kind of symptom in the CSS."}
+include_graphics(here("2_supplementary_materials/analyses/plots/css_10symptoms_plot_cat19.png"))
+```
+
+
+\pagebreak
+
+
+## Analyses with inclusion of the very-low dose infected individual 
+
+
+As explained in the main text, the original study also administered a dose of 0.48 RT-PCR units. At that dose level, only a single challenged individual became infected. We removed this person for the analysis presented in the main text. However, we also decided to conduct a sensitivity analysis that re-computes all results shown in the main text, now with the additional individual included.
+
+
+### Assessing association of total virus shedding with dose
+
+
+Comparison of this figure with the one shown in the main text shows overall similar results. 
+
+
+```{r trendplots, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Virus shedding in feces or vomit. A) Total fecal virus shedding in the first 96 hours. B) Total fecal virus shedding with all data. C) Total vomit virus shedding. The lines show means of estimations. The grey areas show 95\\% equal-tailed credible intervals (CI). Points with circle shape are raw data. Missing values due to LODs were replaced with fixed values (Supplementary, accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/allshedding_con20.png"))
+```
+
+
+\clearpage
+
+
+### Modeling of virus concentration in feces
+
+
+As Figures \@ref(fig:idcurves20) -- \@ref(fig:curves2nd20) show, the findings remain essentially unchanged for these outcomes compared to what is shown in the main text.
+
+
+```{r idcurves20, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Fitted fecal virus concentration curves. The red lines show means of estimations. The grey areas show 95\\% equal-tailed credible intervals (CI). LOD1 and LOD2 indicate the two limits of detection. Points with triangle shape represent samples that are positive for qRT-PCR. Points with circle shape represented samples that are positive for IMC and negative for qRT-PCR. Points with square shape represented samples that are negative for IMC and negative for qRT-PCR. Missing values due to LODs were treated as censors (Supplementary accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_curves_mu_id_con20_plot_combine.png"))
+```
+
+
+\clearpage
+
+
+```{r fixcurves20, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Fitted virus concentration (GEC/g) in feces. The lines show means of estimations. The colored areas show 95\\% equal-tailed credible intervals (CI). LOD1 and LOD2 represent the two limits of detection. A) The fitted curves for 90 days. B) The fitted curves for the first 7 days. Missing values due to LODs were treated as censors (Supplementary accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_curves_mu_con20_plot.png"))
+```
+
+
+\clearpage
+
+
+```{r curves2nd20, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Model predictions for viral kinetics as a function of inoculum dose. The lines show means of estimations. The grey areas show 95\\% equal-tailed credible intervals (CI). A) Time to detection (above $15,000$ GEC). B) Time to peak. C) Shedding duration (period that virus concentration above $15,000$ GEC). D) Total virus load (area under curve)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_brms_fit_op_con20_plot.png"))
+```
+
+
+\clearpage
+
+
+### Assessing association of symptoms with dose
+
+
+As figure \@ref(fig:sympmod20) shows, the association between dose and symptom outcomes also remains essentially unchanged when including the additional individual in the analysis. We also again find a similar pattern between individual symptoms and dose as found previously (figure \@ref(fig:allsympmod20)).
+
+
+```{r sympmod20, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Estimated dose impact on symptoms. The lines show means of estimations. The grey areas show 95\\% equal-tailed credible intervals (CI). Points with circle shape are raw data."}
+include_graphics(here("2_supplementary_materials/analyses/plots/allsymptoms_con20.png"))
+```
+
+
+\clearpage
+
+
+```{r, allsympmod20, out.width="100%", fig.align='center', echo=FALSE, fig.cap="Associations between dose and each type of symptoms used for the calculation of comprehensive symptom score. The impact of dose was tested with each kind of symptom in the CSS."}
+include_graphics(here("2_supplementary_materials/analyses/plots/css_10symptoms_plot_con20.png"))
+```
+
+
+\pagebreak
+
+
+# References

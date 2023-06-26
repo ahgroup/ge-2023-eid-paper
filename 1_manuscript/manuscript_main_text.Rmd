@@ -1,0 +1,408 @@
+---
+title: "Assessing the impact of norovirus inoculum dose on virus kinetics, shedding and symptoms"
+author: "Yang Ge, Zane Billings, Antone Opekun, Mary Estes, David Graham, Juan Leon, Katia Koelle, Ye Shen, Robert Atmar, Benjamin Lopman, Andreas Handel"
+site: bookdown::bookdown_site
+documentclass: article
+output:
+  bookdown::word_document2: 
+    toc: false
+    number_sections: false
+    reference_docx: "template.docx"
+bibliography: ["bibliography.bib"]
+csl: "bibliography_form.csl"
+---
+
+```{r, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,message = FALSE,error = FALSE,warning = FALSE)
+library(knitr)
+library(here)
+library(dplyr)
+library(huxtable)
+library(stringr)
+
+norodata <- readRDS(here("2_supplementary_materials/data/norodata.rds"))
+```
+
+
+```{r setup, include=FALSE}
+max_follow_up <- round(max(norodata$ftsshedding$days),0)
+data_tab1 <- norodata$data_tab1
+vsamples <- norodata$vtsshedding %>% nrow()
+vids <- norodata$vtsshedding %>% distinct(ID) %>% nrow()
+
+allshedding_fit_con19 <- readRDS(here("2_supplementary_materials/analyses/rds/allshedding_fit_con19.rds")) %>% 
+  mutate(rs = paste0(format(exp(Estimate),digits = 2, scientific = TRUE),
+                     " (95%CI, ",format(exp(Q2.5),digits = 2, scientific = TRUE),
+                     " to ",format(exp(Q97.5),digits = 2, scientific = TRUE),")")) %>% 
+  select(dose_log, outcome, rs, Estimate)
+
+feces96 <- allshedding_fit_con19 %>% filter(outcome == "feces96")
+vshedall <- allshedding_fit_con19 %>% filter(outcome == "vshedall")
+
+symp_tab <- readRDS(here("2_supplementary_materials/analyses/rds/allsymptoms_fit_con19.rds")) %>%
+  mutate(rs = paste0(round(Estimate,1),
+                     " (95%CI, ",round(Q2.5,1),
+                     " to ",round(Q97.5,1),")")) %>%
+  select(dose, outcome, rs, Estimate)
+
+icb <- symp_tab %>% 
+  filter(outcome == "A: Incubation period (day)") %>% 
+  pull(Estimate) %>% 
+  round(2)
+
+icb_range <- paste0( max(icb)," to ", min(icb))
+
+icb4.8 <- symp_tab %>% 
+  filter(dose == 4.8, outcome == "A: Incubation period (day)") %>%
+  pull(rs)
+
+icb4800 <- symp_tab %>% 
+  filter(dose == 4800, outcome == "A: Incubation period (day)") %>% 
+  pull(rs)
+
+mvs4.8 <- symp_tab %>% 
+  filter(dose == 4.8, outcome == "B: Modified Vesikari score") %>% 
+  pull(rs)
+
+mvs4800 <- symp_tab %>% 
+  filter(dose == 4800, outcome == "B: Modified Vesikari score") %>% 
+  pull(rs)
+
+css4.8 <- symp_tab %>% 
+  filter(dose == 4.8, outcome == "C: Comprehensive symptom score") %>% 
+  pull(rs)
+
+css4800 <- symp_tab %>% 
+  filter(dose == 4800, outcome == "C: Comprehensive symptom score") %>% 
+  pull(rs)
+
+holder_brms_fit_op_con19 <- readRDS(here("2_supplementary_materials/analyses/rds/holder_brms_fit_op_con19.rds"))
+
+vonset <- holder_brms_fit_op_con19$ts_onset %>%
+  mutate(rs = paste0(round(Estimate,1),
+                     " (95%CI, ",round(Q2.5,1),
+                     " to ",round(Q97.5,1),")")) %>%
+  select(dose, rs, Estimate)
+
+vonset_range <- paste0(vonset$rs[vonset$Estimate == max(vonset$Estimate)]," to ",vonset$rs[vonset$Estimate == min(vonset$Estimate)])
+
+vonset4.8 <- vonset %>% filter(dose == 4.8) %>% pull(rs)
+
+vonset4800 <- vonset %>% filter(dose == 4800) %>% pull(rs)
+
+duration <- holder_brms_fit_op_con19$ts_duration %>%
+  mutate(rs = paste0(round(Estimate,1),
+                     " (95%CI, ",round(Q2.5,1),
+                     " to ",round(Q97.5,1),")")) %>%
+  select(dose, rs, Estimate)
+
+auc <- holder_brms_fit_op_con19$ts_auc %>% 
+  mutate(rs = paste0(format(Estimate,digits = 2, scientific = TRUE),
+                     " (95%CI, ",format(Q2.5,digits = 2, scientific = TRUE),
+                     " to ",
+                     format(Q97.5,digits = 2, scientific = TRUE),")")) %>% 
+  select(dose_log, rs, Estimate)
+
+tpkv <- holder_brms_fit_op_con19$ts_tpkv %>%
+  mutate(rs = paste0(round(Estimate,1),
+                     " (95%CI, ",
+                     round(Q2.5,1)," to ",
+                     round(Q97.5,1),")")) %>%
+  select(dose, rs, Estimate)
+
+tpkv_range <- paste0(tpkv$rs[tpkv$Estimate == max(tpkv$Estimate)]," to ",tpkv$rs[tpkv$Estimate == min(tpkv$Estimate)])
+
+tpkv4.8 <- tpkv %>% filter(dose == 4.8) %>% pull(rs)
+
+tpkv4800 <- tpkv %>% filter(dose == 4800) %>% pull(rs)
+```
+
+
+### Authors affiliations
+
+
+Yang Ge, School of Health Professions, University of Southern Mississippi, Hattiesburg, 39402, Mississippi, USA, <https://orcid.org/0000-0001-5100-0703>; Zane Billings, Department of Epidemiology and Biostatistics, The University of Georgia, Athens, Georgia, USA, <https://orcid.org/0000-0002-0184-6134>; Juan Leon, Hubert Department of Global Health, Rollins School of Public Health, Emory University, Atlanta, Georgia, USA; Katia Koelle, Department of Biology, Emory University, Atlanta, Georgia, USA; Benjamin Lopman, Department of Epidemiology, Rollins School of Public Health, Emory University, Atlanta, Georgia, USA; Antone Opekun, Department of Medicine, Baylor College of Medicine, Houston, Texas, USA; Mary Estes, Departments of Molecular Virology & Microbiology and Medicine, Baylor College of Medicine, Houston, Texas, USA; David Graham, Departments of Medicine and Molecular Virology & Microbiology, Baylor College of Medicine, Houston, Texas, USA; Robert Atmar, Departments of Medicine and Molecular Virology & Microbiology, Baylor College of Medicine, Houston, Texas, USA, <http://orcid.org/0000-0001-9989-6772>; Ye Shen, Department of Epidemiology and Biostatistics, The University of Georgia, Athens, Georgia, USA; Andreas Handel, Department of Epidemiology and Biostatistics, The University of Georgia, Athens, Georgia, USA, <http://orcid.org/0000-0002-4622-1146>
+
+
+### Corresponding authors
+
+
+Yang Ge, School of Health Professions, University of Southern Mississippi, Hattiesburg, 39402, Mississippi, USA. Email: [yang.ge\@usm.edu](mailto:yang.ge@usm.edu){.email}; Andreas Handel, University of Georgia, College of Public Health, Department of Epidemiology and Biostatistics, Athens, Georgia, United States, 30602. Email: [ahandel\@uga.edu](mailto:ahandel@uga.edu){.email}
+
+
+## Word count
+
+
+Abstract: 202; Main text: 3304; Figures: 4; Tables: 1
+
+
+## Conflicts of interest
+
+
+None of the authors declare any conflicts of interest.
+
+
+## Funding sources
+
+
+YG, JL, KK, BL, and AH are partially supported by NIH grant R01 GM124280. YG was supported by the Start-up Grant from the University of Southern Mississippi. JL is partially supported by the National Institute of Food and Agriculture at the U.S. Department of Agriculture (2019-67017-29642). ZB is supported by the University of Georgia Graduate School. DG and AO are partially supported by the Office of Research and Development Medical Research Service Department of Veterans Affairs, Public Health Service grant DK56338, which funds the Texas Medical Center Digestive Diseases Center.
+
+
+## About the Author
+
+
+Dr. Ge is an assistant professor at the University of Southern Mississippi. His research focuses on Infectious Disease Epidemiology, covering pathogens like influenza, norovirus, COVID-19, and tuberculosis.
+
+
+\pagebreak
+
+<!-- Abstract -->
+
+# Abstract
+
+
+## Background
+
+
+After norovirus infection occurs, the impact of virus dose on outcomes like virus shedding and symptoms is not well understood.
+
+
+## Methods
+
+
+We performed a secondary analysis of a human norovirus challenge study by Bayesian mixed effects models.
+
+
+## Results
+
+
+As the dose increased from 4.8 to 4800 reverse transcription-polymerase chain reaction (RT-PCR) units, the total amount of shed virus in feces increased from `r as.character(feces96$rs[1])` to `r as.character(feces96$rs[7])` genomic equivalent copies (GEC), and in vomit it increased from `r as.character(vshedall$rs[1])` to `r as.character(vshedall$rs[7])` GEC. The onset time of viral shedding in feces decreased from `r as.character(vonset4.8)` to `r as.character(vonset4800)` days, and the time of peak viral shedding decreased from `r as.character(tpkv4.8)` to `r as.character(tpkv4800)` days. Time to symptom onset decreased from `r as.character(icb4.8)` to `r as.character(icb4800)` days. One type of symptom score barely changed, while another showed a noticeable increase.
+
+
+## Conclusions
+
+
+An increase in norovirus inoculum dose was associated with more rapid shedding and symptom onset, and possibly increased symptom severity. The impact on virus load and shedding was minimal or inconclusive.
+
+
+## Key words 
+
+
+Norovirus, inoculum dose, virus shedding
+
+
+\pagebreak
+
+
+<!-- Introduction -->
+
+
+# Introduction
+
+
+Norovirus is a major cause of foodborne disease and is responsible for a large number of cases, hospitalizations, and deaths both in the United States and globally.[@patel2008; @lozano2012; @bartsch2016; @scallan2011] Specific treatments are currently not available, and vaccines are still under development.[@scallan2011; @atmar2011] Generic infection control measures are currently the best approaches to minimizing disease burden.[@johnston2007; @isakbaeva2005; @carling2009; @wikswo2011; @bitler2013]
+
+
+It is well understood that an increase in exposure dose (number of virus particles) is associated with an increased risk of infection. This applies to norovirus,[@teunis2008; @vanabel2017; @messner2014; @schmidt2015] as well as many other pathogens.[@haas1983; @teunis1999]
+
+
+Less is known about the possible impact of dose on infection outcomes, given that infection has occurred. For acute infections such as influenza, infectious bronchitis virus, and parainfluenza virus, animal studies and models suggest that dose influences the virus load kinetics.[@li2014; @handel2018; @moore2020] For norovirus, some evidence from experimental challenge studies suggests that dose is associated with more rapid onset of symptoms.[@atmar2014] To further understand the impact of inoculum dose on infection outcomes such as  virus shedding and symptom severity, we performed a secondary analysis of data from a human norovirus challenge study.[@atmar2014] 
+
+
+\pagebreak
+
+
+<!-- Methods -->
+
+
+# Methods
+
+
+The following sections provide brief descriptions of our methodology. Complete modeling and analysis details, including all data and code needed to reproduce our results, are provided in the supplement.
+
+
+## Data
+
+
+The data we used for our analyses are from a human challenge study. The clinical protocol was reviewed and approved by the institutional review boards of the Baylor College of Medicine and The Houston Methodist Hospital, and written informed consent was obtained from each study participant. The study was registered at ClinicalTrials.gov (NCT00138476).[@atmar2008; @kavanagh2011; @czako2012; @ajami2012; @atmar2014]
+
+
+In the challenge study,  57 healthy individuals (18 to 50 years of age) were randomly inoculated with either placebo or norovirus genogroup I genotype 1 strain  (GI.1 NV) at four different doses (0.48, 4.8, 48, or 4800 RT-PCR units). 21 individuals became infected. One infected individual was lost to follow-up and excluded from all analyses. Only a single individual in the 0.48 unit dose group became infected. We excluded this individual from our main analyses. There were  6, 7, and 6 individuals in the 4.8, 48, and 4800 RT-PCR unit dose groups remaining for our analysis. In the supplement, we show analyses that include the single individual who got infected at the 0.48 dose level.
+
+
+All individuals were isolated in the research center for at least four days (96 hours) following inoculation. The study collected samples of feces and vomit and recorded clinical symptoms. Samples were also collected for four to eight weeks post-inoculation. For some of our analyses, we focused on the 96 hours during which individuals were under clinical observation. For other analyses, we included the data collected after individuals returned home. We state which data are used for each analysis.
+
+
+## Overall analysis approach and implementation
+
+
+Given that we performed a secondary data analysis, a strict null hypothesis significance testing (NHST) framework using $p$-values was not suitable. We, therefore, decided to perform all analyses in a Bayesian framework. For all analyses, we used Bayesian mixed effects models. We treated the dose as a continuous variable for the results shown in the main text. The supplement shows a sensitivity analysis with dose modeled as categorical. We report the mean of the estimated posterior distribution with 95% equal-tailed credible intervals for all model results.[@mcelreath2020] All analyses were completed using `r version$version.string`,[@team2017] and `Stan`,[@carpenter2017] accessed via the `brms` package in `R`.[@burkner2017] Rhat values were used to diagnose convergence.[@burkner2017] Detailed method descriptions, sensitivity analyses, and all data and code required to reproduce the results are provided in the supplementary materials.
+
+
+## Analysis of virus shedding outcomes
+
+
+Virus shedding concentration in samples was measured by either an immunomagnetic capture (IMC) RT-PCR assay that provided a qualitative readout (positive or negative) or real-time quantitative RT-PCR (qRT-PCR), which provided a quantitative readout in genomic equivalent copies (GEC).[@atmar2008] These two methods had limits of detection (LOD) at 15,000 GEC per gram of stool (termed LOD1 in the following) and 40,000,000 GEC per gram of stool (termed LOD2 in the following), respectively. Therefore, the virus shedding concentration could be between zero and LOD1 (negative IMC, negative qRT-PCR), between LOD1 and LOD2 (positive IMC, negative qRT-PCR), or a quantitative measurement above LOD2 (positive qRT-PCR). Vomit shedding data were reported similarly, with either a numeric value or a positive or negative readout. We accounted for this censored data structure in our models (see supplement for details).
+
+
+The total virus contained in each sample was obtained by multiplying virus concentration by sample weight for feces (i.e., GEC/g $\times$ weight of feces in grams) or sample volume for vomit (i.e., GEC/mL $\times$ volume of vomit in mL). We calculated each participant's total amount of virus shedding in feces and vomit by summing up virus shedding in all samples per participant. We used a linear model structure to analyze associations between inoculum dose and the total amount of virus shedding.
+
+
+In a further analysis, we modeled the longitudinal time-series of virus concentration in feces, $V(t)$, using the four-parameter equation $V(t) = (2 p)/(exp(-g  (t - T)) + exp(d  (t - T)))$. This equation was shown to accurately describe trajectories of acute viral infections.[@holder2011; @li2014] We fitted the trajectories using a Bayesian non-linear mixed effects model where the mean of the response was described using this equation. We used the comparison between the parameter's prior and posterior distributions to ensure that the choice of prior distribution had no significant impact on our results. We sampled from the posterior distribution of the estimated parameters to obtain predicted trajectories of virus concentration kinetics. From these time-series, we computed several summary quantities, namely 1) virus shedding onset (time at which the trajectory crossed the lower limit of detection, LOD1); 2) time to peak virus shedding; 3) shedding duration, defined as the total amount of time at which virus concentration was above LOD1; and 4) total amount of virus shed, defined as the area under the virus concentration curve.
+
+
+Vomiting episodes were too few (`r as.character(vids)` individuals with `r as.character(vsamples)` samples of vomit) to allow for a time-series analysis similar to the one we performed for virus shedding in feces (see supplementary material for vomit event time-series data).
+
+
+## Analysis of symptom outcomes
+
+
+The study recorded the following ten kinds of symptoms: body temperature, malaise, muscle aches, headache, nausea, chills, anorexia, cramps, unformed or liquid feces, and vomiting. Clinical symptoms (except feces and vomit) were reported as none, mild, moderate, or severe, which we coded as a score of 0 to 3. For feces, we used a scoring of solid = 0, unformed = 1 and liquid = 2. Vomit was reported as absent or present and scored as 0 or 1.
+
+
+We considered time to onset of symptoms (incubation period) and two symptom scores as outcomes of interest. We defined onset of symptoms as the time between inoculation and the first reported symptom of any type. For the first symptom score, we used a modified Vesikari score (MVS) that was previously applied to measure norovirus severity.[@ruuska1990; @freedman2010; @atmar2011; @bierhoff2018; @shim2016] The MVS was computed using a limited number of symptoms (fever, diarrhea, and vomiting). We also developed an additional score, which we call the comprehensive symptom score (CSS). The CSS includes all reported ten symptoms in this study. Additional details of score computation, scores for each individual, and further model details are provided in the supplementary materials.
+
+
+## Sensitivity analyses
+
+
+We performed two sensitivity analyses. In one analysis, we treated dose as categorical rather than continuous. In the other analysis, we included the single individual who became infected after exposure to a dose of 0.48 RT-PCR units. Results from these sensitivity analyses are briefly summarized at the end of the results section and the full results are reported in the supplementary material. 
+
+
+\pagebreak
+
+
+<!-- Results -->
+
+
+# Results
+
+
+## Data description
+
+
+Detailed description of the study can be found in previous publications.[@atmar2008; @kavanagh2011; @czako2012; @ajami2012; @atmar2014]
+
+
+Table \@ref(tab:tab1) summarizes the infected individuals included in our analyses. Distributions of age, sex, and ABO blood group status were generally similar across dose groups.
+
+
+```{r tab1}
+vshed_hux <- huxtable(data_tab1) %>% 
+  set_outer_padding(0) %>% 
+  set_bold(1, everywhere) %>% 
+  set_bottom_border(1, everywhere) %>% 
+  set_bottom_border(final(1), everywhere) %>% 
+  set_row_height(0) %>% 
+  set_all_padding(0) 
+
+vshed_hux <- set_font_size(vshed_hux,11)
+caption(vshed_hux) <- sanitize("Description of infected individuals",type = "latex")
+
+vshed_hux
+```
+
+
+## Association between dose and total virus shedding 
+
+
+We computed total virus shedding in either feces or vomit by summing the amount of shed virus in all samples for each individual. We focused on fecal shedding during the first 96 hours of the study when patients were under clinical observation. Almost all viral shedding events that occurred during this time frame were recorded. Every individual shed virus in at least one fecal sample. All vomiting events occurred within the first 96 hours, and only `r as.character(vids)` individuals vomited. Virus shedding showed some association with dose, though with a fair amount of uncertainty (Figure \@ref(fig:allsheddingcon19)), leading to overall inconclusive results. An alternative analysis using fecal shedding that includes the self-reported data after individuals returned to their homes is shown in the supplement. In that case, there was no noticeable association.
+
+
+```{r allsheddingcon19, out.width="100%",echo=FALSE,fig.cap="Total virus shedding in feces and vomit. Open circles represent raw data points. The lines and shaded regions indicate the mean and 95% credible intervals of the fitted Bayesian model. A) Cumulative virus shedding in feces. B) Cumulative virus shedding in vomit. Missing values due to LODs were replaced with fixed values (Supplementary, accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/twoshedding_con19.png"))
+```
+
+
+## Association between dose and viral kinetics
+
+
+Next, we fitted the virus concentration model shown in the methods section to the time-series data for virus load for each individual. The parameter's prior and posterior distributions showed that the choice of prior distribution had no significant impact on our results (shown in the supplement).
+
+
+The population-level curves per dose group for the estimated virus load trajectories are shown in Figure \@ref(fig:fixcurves21). (Fitted curves for each individual are shown in the supplement.) The curves show a trend toward more rapid onset and earlier virus peak as dose increases (Figure \@ref(fig:fixcurves21)B), but little impact on shedding duration and total viral load (Figure \@ref(fig:fixcurves21)A). To further quantify these results, we sampled trajectories from the posterior distributions. For each trajectory, we computed the four quantities indicated in Figure \@ref(fig:fixcurves21)A: shedding onset, i.e., time at which virus became detectable, time of peak virus shedding, duration of virus shedding, and the total amount of virus shed (computed as area under the curve, AUC). We then examined the distribution of each of these quantities.
+
+
+```{r fixcurves21, out.width="100%",echo=FALSE,fig.cap="Fitted virus concentration (GEC/g) in feces. The curves and shaded regions indicate the mean and credible intervals of the fitted time series Bayesian model. The LOD1 and LOD2 lines indicate the two different limits of detection (see methods for details). A) Fitted curves showing the full infection time-course. AUC: area under virus concentration curve. Onset: time at which virus load rose to the LOD1 level. Duration: the amount of time where virus load was above the LOD1 level. Peak: time to virus peak shedding. B) Zoomed in plot of the first 7 days to better show the initial increase and peak. Missing values due to LODs were treated as censors (Supplementary, accounting for limits of detection)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_curves_mu_con19_plot.png"))
+```
+
+
+Figure \@ref(fig:curves2nd) shows the model-predicted relationship between dose and those four quantities. As the dose increased from 4.8 to 4800 RT-PCR units, average onset time decreased from `r as.character(vonset_range)` days; and the time of virus peak decreased from `r as.character(tpkv_range)` days. There was a very slight trend toward increased duration of shedding, from `r as.character(duration$rs[1])` to `r as.character(duration$rs[7])` days. Total virus load barely changed, from `r as.character(auc$rs[1])` to `r as.character(auc$rs[7])` GEC*days/g. 
+
+
+```{r curves2nd, out.width="100%",echo=FALSE,fig.cap="Associations between four characteristics of fecal viral shedding kinetics and levels of inoculum dose. The lines and shaded regions indicate the mean and 95% credible intervals of the posteriors samples of the fitted time series model. A) Shedding onset (time at which virus load reaches LOD1). B) Time to virus peak shedding. C) Shedding duration (amount of time where virus load was above LOD1). D) Total virus load (area under the fitted trajectory)."}
+include_graphics(here("2_supplementary_materials/analyses/plots/holder_brms_fit_op_con19_plot.png"))
+```
+
+
+## Association between dose and symptoms
+
+
+We investigated associations between dose and symptom related outcomes next. Figure \@ref(fig:sympmod) shows that a higher inoculum dose was associated with a shorter incubation period (more rapid symptoms onset). The incubation period decreased from `r as.character(symp_tab[1,3])` to `r as.character(symp_tab[7,3])` days as dose increased (Figure \@ref(fig:sympmod)A).
+
+
+Our model estimated a slight increase in symptoms as measured by the modified Vesikari score (MVS), from `r as.character(symp_tab[15,3])` to `r as.character(symp_tab[21,3])` as dose increased (Figure \@ref(fig:sympmod)B). The comprehensive symptom score (CSS) showed a more pronounced increase, from `r as.character(symp_tab[8,3])` to`r as.character(symp_tab[14,3])` (Figure \@ref(fig:sympmod)C). A further analysis suggests that the different pattern seen for the MVS and CSS might be due to those symptoms which are part of the MVS not showing an association with dose, while a few symptoms (Cramps, Malaise and Nausea), which are part of the CSS but not the MVS do show a correlation with dose. More details are given in the supplement.
+
+
+```{r sympmod, out.width="100%",echo=FALSE,fig.cap="Association between dose and symptoms. Circles show raw data for individuals. The lines and shaded regions indicate the mean and 95% credible intervals of fitted Bayesian model. A) Incubation period, i.e., time between infection and onset of first symptoms. B) Severity using the modified Vesikari score. C) Severity using the comprehensive symptom score."}
+include_graphics(here("2_supplementary_materials/analyses/plots/allsymptoms_con19.png"))
+```
+
+
+## Sensitivity analyses
+
+
+We performed two main sensitivity analyses. The details are shown in the supplement. Here we provide a brief summary. 
+
+
+In the first sensitivity analysis, we treated dose as categorical (low/medium/high) instead of continuous. For this analysis, total virus shedding in feces and vomit was highest at the intermediate dose, though with overlap of the credible intervals for all doses. Similar to the main analysis, an increase in dose led to earlier onset and peak of shedding. Duration of shedding and total virus load concentration also suggested the highest levels at intermediate doses, though again with overlap in uncertainty estimates. Symptom onset was earlier, and the CSS measure increased, with no noticeable impact on the MVS measure.
+
+
+In the second sensitivity analysis, we included the single individual who got infected after receiving the lowest dose, 0.48 RT-PCR units. For this dataset, we found similar patterns of increasing total virus shedding in feces and vomit as dose increased. Also consistent with above results, onset and peak of shedding occurred earlier, but duration of shedding and total virus load concentration did not change noticeably. Symptom onset was earlier and stronger based on the CSS measure, with no noticeable impact on the MVS.
+
+
+The categorical analysis suggested similar patterns as those presented in the main text but supported that, though very tentative, intermediate dose might be associated with the highest level of shedding. With only a single individual in the lowest dose category, a categorical analysis that included the individual did not seem to be useful, so we did not perform such an analysis.
+
+
+In time series models, we treated values that are below the limits of detection as censors. In other virus shedding models, we additional performed two sensitivity analyses to explore the impact of choices for the values that are below the limits of detection. Conclusions remain consistent.
+
+
+\pagebreak
+
+
+<!-- Discussion -->
+
+
+# Discussion
+
+
+We explored the impact of norovirus inoculum dose on infection and disease outcomes, an important gap in the existing literature. We found that an increased dose was associated with a faster onset and peak of virus shedding in feces (Figure \@ref(fig:curves2nd) A and B), but not with fecal shedding duration and total virus concentration (Figure \@ref(fig:curves2nd) C and D). A trend toward increased total shedding was noted in both feces and vomit (Figure \@ref(fig:allsheddingcon19)). Our analysis also showed a pattern of accelerated onset of symptoms. Symptom severity showed an increase with inoculum dose for the CSS measure but not the MVS measure (Figure \@ref(fig:sympmod)). This may be because only some symptoms are impacted by dose, and those are captured by CSS but not MVS (see supplementary materials). An increase in symptoms despite no noticeable change in virus load suggests that symptoms are mostly immune-mediated. We found mild evidence that a high virus growth rate associated with increased symptoms (supplemental materials), thus a more rapid initial virus growth might trigger a stronger immune response. This could be tested in studies that measure components of the ensuing immune response.
+
+
+Findings similar to ours have been reported for other enteric pathogens. The clinical presentation of typhoid illness appears to be independent of inoculum dose, while the onset of symptoms was more rapid following a higher infectious dose.[@hornick1970] More rapid onset of symptoms after a larger infectious dose has also been observed with cholera infections.[@hornick1971] This could suggest a general pattern of dose-dependent incubation periods for enteric diseases. We did not find evidence of pre-symptomatic virus shedding. It could be due to the fact that diarrhea and vomit were considered as symptoms in our research, which explains the similar time of virus shedding onset time and incubation period.
+
+
+The association between dose and severity might partially explain the results of several recent norovirus vaccine candidates. These vaccines have shown limited effectiveness at reducing the risk of infection but do seem to reduce disease outcomes.[@atmar2011; @bernstein2015] Perhaps protection induced by current vaccine candidates (assumed to be mainly mediated by antibodies) is not enough to provide sterilizing immunity and thus prevent infection but can reduce the effective dose that starts an infection and thus reduces symptoms. This would be consistent with our findings here.
+
+
+However, it is currently unclear what the typical norovirus dose is for natural infections, and how this dose compares to the doses chosen in the challenge study data we analyzed. This currently limits any possibility to generalize results obtained from challenge studies to natural infections, or the potential role of vaccine candidates at influencing the effective inoculum size that starts an infection. Thus, potential clinical or epidemiological implications of changes in dose for natural infections will need to await further investigations to determine the potential applicability of challenge study results to such natural infection settings.
+
+
+Our analysis was a secondary data analysis of a limited number of individuals, which resulted in wide credible intervals and constrained further explorations of non-linear models. The associations we found may not equal to causality. As such, our results should be considered exploratory, and need to be confirmed in future studies. Further studies, ideally with larger sample sizes, are needed. Larger sample sizes might also allow for stratification based on host characteristics, which could yield information regarding possible interactions between host characteristics and dose-outcome relationships.
+
+
+To summarize, if we can assume that the associations we found have an underlying causal relation (something that needs to be confirmed in future studies), our results suggest that norovirus dose might impact some infection outcomes, while not influencing others. Thus, when comparing results across challenge studies, or trying to combine data from multiple studies for analysis, some care must be taken if doses are different. In some instances, combining data across studies seems reasonable, such as combining data from multiple studies to focus on viral shedding. For symptom-related outcomes and quantities that focus on infection kinetics, dose might lead to differences between studies that prohibit easy comparison. Since it is currently not clear how doses used in challenge studies related to doses encountered in natural infections, the impact of dose for natural infections, with possible implications for infection control measures, requires further study.
+
+
+\pagebreak
+
+
+<!-- Reference -->
+
+
+# Reference
+
+
+::: {#refs}
+:::
